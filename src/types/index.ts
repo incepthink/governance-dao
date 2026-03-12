@@ -1,5 +1,5 @@
 export interface Org {
-  id: string;
+  id: number | string;
   name: string;
   description: string;
   imageUrl: string;
@@ -93,4 +93,13 @@ export interface OwnerAccount {
   email: string;
   walletAddress: string;
   orgId?: string;
+}
+
+export interface Owner {
+  id: string;
+  name: string;
+  email: string;
+  role: "owner" | "manufacturer";
+  company?: string;
+  walletAddress?: string;
 }

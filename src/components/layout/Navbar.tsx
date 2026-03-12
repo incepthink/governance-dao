@@ -1,12 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import { Vote, Menu, X, User, LayoutDashboard, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAppStore } from "@/store/useAppStore";
-import { truncateAddress } from "@/lib/format";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useState } from "react";
 
 export function Navbar() {
-  const { walletAddress, connectWallet, disconnectWallet } = useAppStore();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -52,24 +50,34 @@ export function Navbar() {
 
         {/* Wallet + Mobile Toggle */}
         <div className="flex items-center gap-2">
-          {walletAddress ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={disconnectWallet}
-              className="border-primary/30 font-mono text-xs hover:border-primary"
-            >
-              {truncateAddress(walletAddress)}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={connectWallet}
-              className="font-mono text-xs"
-            >
-              Connect Wallet
-            </Button>
-          )}
+          <ConnectButton.Custom>
+            {({ account, chain, openAccountModal, openConnectModal, mounted }) => {
+              const connected = mounted && account && chain;
+              return (
+                <div {...(!mounted && { 'aria-hidden': true, style: { opacity: 0, pointerEvents: 'none', userSelect: 'none' } })}>
+                  {connected ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="font-mono text-sm"
+                      onClick={openAccountModal}
+                    >
+                      {account.displayName}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="font-mono text-sm"
+                      onClick={openConnectModal}
+                    >
+                      Connect Wallet
+                    </Button>
+                  )}
+                </div>
+              );
+            }}
+          </ConnectButton.Custom>
           <Button
             variant="ghost"
             size="icon"

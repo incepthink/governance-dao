@@ -1,19 +1,25 @@
 import { create } from "zustand";
-import { Org, Proposal, Vote, OwnerAccount } from "@/types";
+import Cookies from "js-cookie";
+import { Org, Proposal, Vote, Owner } from "@/types";
+import { loginOwner as apiLoginOwner, signupOwner as apiSignupOwner } from "@/lib/authApi";
 import { mockOrgs } from "@/data/mockOrgs";
 import { mockProposals } from "@/data/mockProposals";
 import { mockVotes } from "@/data/mockVotes";
 
+const COOKIE_EXPIRES = 10 / 24; // 10 hours
+
 interface AppState {
   // Wallet
   walletAddress: string | null;
-  connectWallet: () => void;
-  disconnectWallet: () => void;
+  setWalletAddress: (addr: string | null) => void;
+  walletUser: any | null;
+  setWalletUser: (user: any | null) => void;
 
-  // Owner
-  ownerAccount: OwnerAccount | null;
-  loginOwner: (email: string, password: string) => boolean;
-  signupOwner: (email: string, password: string) => void;
+  // Owner auth
+  owner: Owner | null;
+  token: string | null;
+  loginOwner: (email: string, password: string) => Promise<void>;
+  signupOwner: (name: string, email: string, password: string) => Promise<void>;
   logoutOwner: () => void;
 
   // Orgs
@@ -30,48 +36,62 @@ interface AppState {
   getUserVote: (proposalId: string) => Vote | undefined;
 }
 
-const MOCK_WALLET = "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18";
+const savedToken = Cookies.get("hashvote_token");
+const savedOwnerRaw = Cookies.get("hashvote_owner");
+const savedOwner: Owner | null =
+  savedToken && savedOwnerRaw ? JSON.parse(savedOwnerRaw) : null;
+
+const savedWalletUserRaw = Cookies.get("hashvote_user_instance");
+const savedWalletUser = savedWalletUserRaw ? JSON.parse(savedWalletUserRaw) : null;
 
 export const useAppStore = create<AppState>((set, get) => ({
   walletAddress: null,
-  connectWallet: () => set({ walletAddress: MOCK_WALLET }),
-  disconnectWallet: () => set({ walletAddress: null, ownerAccount: null }),
+  setWalletAddress: (addr) => {
+    if (addr === null) {
+      Cookies.remove("hashvote_user_instance");
+    }
+    set({
+      walletAddress: addr,
+      ...(addr === null ? { owner: null, token: null, walletUser: null } : {}),
+    });
+  },
 
-  ownerAccount: null,
-  loginOwner: (email: string, _password: string) => {
-    const wallet = get().walletAddress;
-    if (!wallet) return false;
-    // Simulate: check if email matches any org owner
-    const org = get().orgs.find((o) => o.ownerEmail === email);
-    set({
-      ownerAccount: {
-        email,
-        walletAddress: wallet,
-        orgId: org?.id,
-      },
-    });
-    return true;
+  walletUser: savedWalletUser,
+  setWalletUser: (user) => {
+    if (user) {
+      Cookies.set("hashvote_user_instance", JSON.stringify(user), { expires: COOKIE_EXPIRES });
+    } else {
+      Cookies.remove("hashvote_user_instance");
+    }
+    set({ walletUser: user });
   },
-  signupOwner: (email: string, _password: string) => {
-    const wallet = get().walletAddress;
-    if (!wallet) return;
-    set({
-      ownerAccount: {
-        email,
-        walletAddress: wallet,
-      },
-    });
+
+  owner: savedOwner,
+  token: savedToken ?? null,
+
+  loginOwner: async (email, password) => {
+    const { token, owner } = await apiLoginOwner(email, password);
+    Cookies.set("hashvote_token", token, { expires: COOKIE_EXPIRES });
+    Cookies.set("hashvote_owner", JSON.stringify(owner), { expires: COOKIE_EXPIRES });
+    set({ owner, token });
   },
-  logoutOwner: () => set({ ownerAccount: null }),
+
+  signupOwner: async (name, email, password) => {
+    const { token, owner } = await apiSignupOwner(name, email, password);
+    Cookies.set("hashvote_token", token, { expires: COOKIE_EXPIRES });
+    Cookies.set("hashvote_owner", JSON.stringify(owner), { expires: COOKIE_EXPIRES });
+    set({ owner, token });
+  },
+
+  logoutOwner: () => {
+    Cookies.remove("hashvote_token");
+    Cookies.remove("hashvote_owner");
+    set({ owner: null, token: null });
+  },
 
   orgs: [...mockOrgs],
   addOrg: (org) =>
-    set((s) => ({
-      orgs: [...s.orgs, org],
-      ownerAccount: s.ownerAccount
-        ? { ...s.ownerAccount, orgId: org.id }
-        : null,
-    })),
+    set((s) => ({ orgs: [...s.orgs, org] })),
 
   proposals: [...mockProposals],
   addProposal: (proposal) =>
@@ -85,10 +105,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (p.id === vote.proposalId) {
           return {
             ...p,
-            yesVotes:
-              vote.vote === "yes" ? p.yesVotes + vote.votingPower : p.yesVotes,
-            noVotes:
-              vote.vote === "no" ? p.noVotes + vote.votingPower : p.noVotes,
+            yesVotes: vote.vote === "yes" ? p.yesVotes + vote.votingPower : p.yesVotes,
+            noVotes: vote.vote === "no" ? p.noVotes + vote.votingPower : p.noVotes,
             totalVoters: p.totalVoters + 1,
           };
         }
@@ -96,13 +114,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       return { votes: newVotes, proposals };
     }),
+
   getUserVote: (proposalId) => {
     const state = get();
     if (!state.walletAddress) return undefined;
     return state.votes.find(
       (v) =>
         v.proposalId === proposalId &&
-        v.voterWalletAddress === state.walletAddress,
+        v.voterWalletAddress === state.walletAddress
     );
   },
 }));

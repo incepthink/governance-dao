@@ -1,44 +1,136 @@
-import { useState, useMemo } from 'react';
-import { Search, TrendingUp, FileText, Vote } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { OrgCard } from '@/components/org/OrgCard';
-import { useAppStore } from '@/store/useAppStore';
-import { useNavigate } from 'react-router-dom';
-import { formatNumber } from '@/lib/format';
+import { useState, useMemo, useEffect } from "react";
+import { Search, TrendingUp, FileText, Vote } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { OrgCard } from "@/components/org/OrgCard";
+import { useNavigate } from "react-router-dom";
+import { formatNumber } from "@/lib/format";
+import { axiosInstance } from "@/lib/utils";
+import { createPublicClient, http, isAddress } from "viem";
+import { baseSepolia } from "viem/chains";
+import { Org } from "@/types";
 
-type Filter = 'all' | 'active' | 'mine';
+type Filter = "all" | "active" | "mine";
+
+const erc20ABI = [
+  {
+    name: "name",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "string" }],
+    stateMutability: "view",
+  },
+  {
+    name: "symbol",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "string" }],
+    stateMutability: "view",
+  },
+] as const;
+
+const tokenClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(import.meta.env.VITE_BASE_TESTNET_RPC),
+});
 
 export default function Landing() {
-  const { orgs, proposals, votes, walletAddress } = useAppStore();
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  const [orgs, setOrgs] = useState<Org[]>([]);
+  const [summary, setSummary] = useState({
+    total_orgs: 0,
+    active_proposals: 0,
+    total_votes_cast: 0,
+  });
+  const [search, setSearch] = useState("");
+  const [filter] = useState<Filter>("all");
   const navigate = useNavigate();
 
-  const totalActiveProposals = proposals.filter(p => p.status === 'active').length;
-  const totalVotesCast = votes.length;
+  useEffect(() => {
+    axiosInstance
+      .get("/platform/dao/organisation")
+      .then(async (res) => {
+        const { summary: s, organisations } = res.data;
+        setSummary(s);
+        const mapped = await Promise.all(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          organisations.map(async (item: any) => {
+            let tokenName = "";
+            let tokenSymbol = "";
+            const addr = item.token?.contract_address;
+            if (addr && isAddress(addr)) {
+              try {
+                const [n, sym] = await Promise.all([
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  tokenClient.readContract({
+                    address: addr,
+                    abi: erc20ABI,
+                    functionName: "name",
+                  } as any),
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  tokenClient.readContract({
+                    address: addr,
+                    abi: erc20ABI,
+                    functionName: "symbol",
+                  } as any),
+                ]);
+                tokenName = n as string;
+                tokenSymbol = sym as string;
+              } catch {
+                /* show card without token details */
+              }
+            }
+            return {
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              imageUrl: item.image_uri,
+              bannerUrl: "",
+              tokenSymbol,
+              tokenName,
+              tokenContractAddress: addr ?? "",
+              totalProposals: item.proposals,
+              activeProposals: item.active_proposals,
+              memberCount: item.members,
+              totalVotes: 0,
+              ownerWallet: "",
+              ownerEmail: "",
+            } satisfies Org;
+          }),
+        );
+        setOrgs(mapped);
+      })
+      .catch(() => {
+        /* silently fail */
+      });
+  }, []);
 
   const filteredOrgs = useMemo(() => {
     let result = orgs;
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter(o => o.name.toLowerCase().includes(q) || o.description.toLowerCase().includes(q));
+      result = result.filter(
+        (o) =>
+          o.name.toLowerCase().includes(q) ||
+          o.description.toLowerCase().includes(q),
+      );
     }
-    if (filter === 'active') result = result.filter(o => o.activeProposals > 0);
-    if (filter === 'mine') result = result.filter(o => o.ownerWallet === walletAddress);
+    if (filter === "active")
+      result = result.filter((o) => o.activeProposals > 0);
     return result;
-  }, [orgs, search, filter, walletAddress]);
+  }, [orgs, search, filter]);
 
   const stats = [
-    { label: 'Total Orgs', value: orgs.length, icon: TrendingUp },
-    { label: 'Active Proposals', value: totalActiveProposals, icon: FileText },
-    { label: 'Total Votes Cast', value: formatNumber(totalVotesCast), icon: Vote },
-  ];
-
-  const filters: { label: string; value: Filter }[] = [
-    { label: 'All', value: 'all' },
-    { label: 'Active Proposals', value: 'active' },
-    { label: 'My Orgs', value: 'mine' },
+    { label: "Total Orgs", value: summary.total_orgs, icon: TrendingUp },
+    {
+      label: "Active Proposals",
+      value: summary.active_proposals,
+      icon: FileText,
+    },
+    {
+      label: "Total Votes Cast",
+      value: formatNumber(summary.total_votes_cast),
+      icon: Vote,
+    },
   ];
 
   return (
@@ -51,13 +143,15 @@ export default function Landing() {
             Decentralised Governance, Powered by Your Community
           </h1>
           <p className="mt-6 max-w-xl text-lg text-muted-foreground leading-relaxed">
-            Create organisations, launch proposals, and let your community vote on-chain. 
-            Transparent, trustless governance on Base Sepolia.
+            Create organisations, launch proposals, and let your community vote
+            on-chain. Transparent, trustless governance on Base Sepolia.
           </p>
           <Button
             size="lg"
             onClick={() => {
-              document.getElementById('orgs')?.scrollIntoView({ behavior: 'smooth' });
+              document
+                .getElementById("orgs")
+                ?.scrollIntoView({ behavior: "smooth" });
             }}
             className="mt-8 font-mono"
           >
@@ -70,13 +164,18 @@ export default function Landing() {
       <section className="container -mt-8 mb-12">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {stats.map((stat) => (
-            <div key={stat.label} className="rounded-xl border border-border bg-card p-5">
+            <div
+              key={stat.label}
+              className="rounded-xl border border-border bg-card p-5"
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                   <stat.icon className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-mono text-2xl font-bold text-foreground">{stat.value}</p>
+                  <p className="font-mono text-2xl font-bold text-foreground">
+                    {stat.value}
+                  </p>
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
                 </div>
               </div>
@@ -97,19 +196,6 @@ export default function Landing() {
               className="pl-10 bg-card border-border font-mono text-sm"
             />
           </div>
-          <div className="flex gap-1">
-            {filters.map((f) => (
-              <Button
-                key={f.value}
-                variant={filter === f.value ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setFilter(f.value)}
-                className="font-mono text-xs"
-              >
-                {f.label}
-              </Button>
-            ))}
-          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -120,7 +206,9 @@ export default function Landing() {
 
         {filteredOrgs.length === 0 && (
           <div className="py-20 text-center">
-            <p className="font-mono text-muted-foreground">No organisations found</p>
+            <p className="font-mono text-muted-foreground">
+              No organisations found
+            </p>
           </div>
         )}
       </section>
