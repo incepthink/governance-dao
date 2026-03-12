@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/examples/governance-dao/assets/:path*", "destination": "/assets/:path*" },
+    { "source": "/examples/governance-dao/:path*", "destination": "/index.html" },
+    { "source": "/examples/governance-dao", "destination": "/index.html" }
+  ]
+}

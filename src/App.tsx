@@ -56,7 +56,7 @@ const App = () => (
       <RainbowKitProvider>
         <TooltipProvider>
           <Toaster />
-          <BrowserRouter>
+          <BrowserRouter basename="/examples/governance-dao">
             <WalletSync />
             <Navbar />
             <Routes>
