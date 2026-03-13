@@ -51,19 +51,30 @@ export function Navbar() {
         {/* Wallet + Mobile Toggle */}
         <div className="flex items-center gap-2">
           <ConnectButton.Custom>
-            {({ account, chain, openAccountModal, openConnectModal, mounted }) => {
+            {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
               const connected = mounted && account && chain;
               return (
                 <div {...(!mounted && { 'aria-hidden': true, style: { opacity: 0, pointerEvents: 'none', userSelect: 'none' } })}>
                   {connected ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="font-mono text-sm"
-                      onClick={openAccountModal}
-                    >
-                      {account.displayName}
-                    </Button>
+                    chain.unsupported ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="font-mono text-sm"
+                        onClick={openChainModal}
+                      >
+                        Wrong Network
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-mono text-sm"
+                        onClick={openAccountModal}
+                      >
+                        {account.displayName}
+                      </Button>
+                    )
                   ) : (
                     <Button
                       variant="default"
