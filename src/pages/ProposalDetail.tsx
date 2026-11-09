@@ -96,13 +96,15 @@ export default function ProposalDetail() {
   const [hasUserVoted, setHasUserVoted] = useState(false);
 
   const fetchVotes = async () => {
+    // Votes are public; user_id is only needed to know if this visitor voted
     const raw = Cookies.get("hashvote_user_instance");
-    if (!raw || !walletAddress) return;
-    const userId: number = JSON.parse(raw).userInstance.id;
+    const userId: number | null =
+      raw && walletAddress ? JSON.parse(raw).userInstance.id : null;
     setVotesLoading(true);
     try {
       const res = await axiosInstance.get(
-        `/platform/dao/vote/proposal/${proposalId}?user_id=${userId}`
+        `/platform/dao/vote/proposal/${proposalId}` +
+          (userId !== null ? `?user_id=${userId}` : "")
       );
       setRecentVotes(res.data.votes ?? []);
       setHasUserVoted(res.data.has_user_voted ?? false);
