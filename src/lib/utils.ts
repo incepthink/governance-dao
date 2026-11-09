@@ -8,11 +8,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const axiosOwner = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: import.meta.env.VITE_HASHCASE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8000",
 });
 
 export const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: import.meta.env.VITE_HASHCASE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8000",
 });
 
 axiosOwner.interceptors.request.use(
